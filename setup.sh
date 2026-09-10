@@ -2,9 +2,16 @@
 # One script to make this folder runnable from scratch.
 #
 #   ./setup.sh                 # packages + every weight the pipeline needs
+#   ./setup.sh --venv          # build a project-local .venv and install into it
+#   ./setup.sh --no-venv       # install into whatever python is active
 #   ./setup.sh --no-weights    # packages only
 #   ./setup.sh --sam3          # also try SAM 3 (gated, needs `hf auth login`)
 #   ./setup.sh --check         # change nothing, just report what is missing
+#
+# Which python gets used, in order: $PYTHON if you set it, then an existing
+# ./.venv, then --venv/--no-venv, then an active conda env, and failing all of
+# that a fresh ./.venv is created for you. The run_*.sh scripts prefer ./.venv
+# too, so once it exists everything lines up on its own.
 #
 # It is safe to re-run: anything already present is left alone.
 set -uo pipefail
@@ -15,12 +22,16 @@ cd "$SCRIPT_DIR"
 WANT_WEIGHTS=1
 WANT_SAM3=0
 CHECK_ONLY=0
+VENV_MODE=auto          # auto | force | never
+VENV_DIR="$SCRIPT_DIR/.venv"
 for arg in "$@"; do
     case "$arg" in
         --no-weights) WANT_WEIGHTS=0 ;;
         --sam3)       WANT_SAM3=1 ;;
         --check)      CHECK_ONLY=1; WANT_WEIGHTS=0 ;;
-        -h|--help)    sed -n '2,10p' "$0"; exit 0 ;;
+        --venv)       VENV_MODE=force ;;
+        --no-venv)    VENV_MODE=never ;;
+        -h|--help)    sed -n '2,17p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg (try --help)" >&2; exit 1 ;;
     esac
 done
@@ -34,23 +45,66 @@ head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
 # ---------------------------------------------------------------- python ---
 head_ "1/5  python"
+make_venv() {  # make_venv <base python>
+    say "creating a project venv in .venv (python -m venv) …"
+    if ! "$1" -m venv "$VENV_DIR" 2>/tmp/venv_err.$$; then
+        bad "could not create .venv:"
+        sed 's/^/      /' /tmp/venv_err.$$ >&2
+        if grep -qi "ensurepip\|python3-venv" /tmp/venv_err.$$; then
+            say "on Debian/Ubuntu: sudo apt install python3-venv"
+        fi
+        rm -f /tmp/venv_err.$$
+        rm -rf "$VENV_DIR"
+        return 1
+    fi
+    rm -f /tmp/venv_err.$$
+    "$VENV_DIR/bin/python" -m pip install -q --upgrade pip setuptools wheel \
+        || note "could not upgrade pip inside .venv"
+    return 0
+}
+
 PY="${PYTHON:-}"
-if [ -z "$PY" ]; then
-    if [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
-        PY="$SCRIPT_DIR/.venv/bin/python"
-    elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "$CONDA_PREFIX/bin/python" ]; then
-        PY="$CONDA_PREFIX/bin/python"
+CREATED_VENV=0
+if [ -n "$PY" ]; then
+    say "using \$PYTHON"
+elif [ -x "$VENV_DIR/bin/python" ]; then
+    PY="$VENV_DIR/bin/python"                       # the project venv already exists
+elif [ "$VENV_MODE" = never ]; then
+    PY="${CONDA_PREFIX:+$CONDA_PREFIX/bin/python}"
+    [ -x "${PY:-}" ] || PY="$(command -v python3 || true)"
+elif [ "$CHECK_ONLY" -eq 1 ]; then
+    # --check must not build anything; report against the active interpreter
+    PY="${CONDA_PREFIX:+$CONDA_PREFIX/bin/python}"
+    [ -x "${PY:-}" ] || PY="$(command -v python3 || true)"
+    note "no .venv yet — checking the active python instead. ./setup.sh --venv builds one"
+else
+    BASE_PY="${CONDA_PREFIX:+$CONDA_PREFIX/bin/python}"
+    [ -x "${BASE_PY:-}" ] || BASE_PY="$(command -v python3 || true)"
+    if [ -z "$BASE_PY" ]; then
+        bad "no python3 on PATH to build a venv from"
+        exit 1
+    fi
+    if [ "$VENV_MODE" = auto ] && [ -n "${CONDA_PREFIX:-}" ]; then
+        # An active conda env probably already carries torch and friends;
+        # silently rebuilding that in a venv would re-download gigabytes.
+        PY="$BASE_PY"
+        note "conda env active ($(basename "$CONDA_PREFIX")) — installing there.
+       ./setup.sh --venv builds a project-local .venv instead"
     else
-        PY="$(command -v python3 || true)"
+        make_venv "$BASE_PY" || exit 1
+        PY="$VENV_DIR/bin/python"
+        CREATED_VENV=1
+        good "created .venv (the run_*.sh scripts pick it up automatically)"
     fi
 fi
+
 if [ -z "$PY" ] || ! "$PY" -c '' 2>/dev/null; then
-    bad "no usable python found. Activate your env first, e.g.  conda activate ultra"
+    bad "no usable python found. Activate an env, or run ./setup.sh --venv"
     exit 1
 fi
 good "$("$PY" -c 'import sys; print(sys.executable)')  ($("$PY" -c 'import sys;print(".".join(map(str,sys.version_info[:3])))'))"
-if [ -z "${CONDA_PREFIX:-}" ] && [ ! -x "$SCRIPT_DIR/.venv/bin/python" ]; then
-    note "no virtualenv or conda env active — packages will go to this python"
+if [ "$CREATED_VENV" -eq 1 ]; then
+    say "torch and its CUDA wheels are a few GB — the first install is slow"
 fi
 
 # -------------------------------------------------------------- packages ---
@@ -103,7 +157,11 @@ PYCHK
 # ------------------------------------------------------------------ cuda ---
 head_ "3/5  gpu"
 "$PY" - <<'PYCUDA'
-import torch
+try:
+    import torch
+except ImportError:
+    raise SystemExit("  \033[33m!\033[0m torch is not installed yet - "
+                     "cannot report the gpu")
 if torch.cuda.is_available():
     print(f"  \033[32m✓\033[0m cuda {torch.version.cuda}: "
           f"{torch.cuda.get_device_name(0)} "
@@ -231,6 +289,10 @@ grep -q '^SOURCE="' run_pipeline.sh 2>/dev/null && \
 # ----------------------------------------------------------------- done ----
 printf '\n\033[1msummary\033[0m  %d ok, %d warning(s), %d problem(s)\n' "$ok" "$warn" "$fail"
 if [ "$fail" -eq 0 ]; then
+    if [ -x "$VENV_DIR/bin/python" ]; then
+        printf '\nthe project venv is at .venv — run_pipeline.sh and run_mask_fixer.sh\n'
+        printf 'use it on their own. For your own commands:  source .venv/bin/activate\n'
+    fi
     cat <<'EOF'
 
 ready. the usual order:
