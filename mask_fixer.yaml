@@ -1,0 +1,36 @@
+# Config for mask_fixer.py — the SAM 3 mask repair UI.
+#
+#   ./run_mask_fixer.sh                 # uses this file
+#   ./run_mask_fixer.sh other.yaml      # uses another one
+#
+# Point `images` and `masks` at any pair of folders whose files share a stem:
+# the pipeline writes crops/foo.jpg next to masks/foo.png, which already match.
+
+# --- what to fix ----------------------------------------------------------
+images: data/CCPL080626M1_1_16_1/camera04_out/crops   # the RGB images
+masks:  data/CCPL080626M1_1_16_1/camera04_out/masks   # what the pipeline made
+out:    data/CCPL080626M1_1_16_1/camera04_out/masks_fixed
+                                 # repaired masks land here; the pipeline's own
+                                 # masks/ folder is never overwritten
+
+# --- which SAM ------------------------------------------------------------
+# sam2 = SAM 2.1, no licence needed, clicks and boxes (this is what works today)
+# sam3 = SAM 3, adds text prompts, but the weights are gated on Hugging Face
+model: sam2
+
+sam2_repo: facebook/sam2.1-hiera-large
+sam2_weights: weights/sam2.1-hiera-large   # downloaded, 857 MB
+
+sam3_repo: facebook/sam3         # gated: accept the licence, then ./setup_sam.sh sam3
+sam3_weights: weights/sam3       # local copy; used when it exists, else the repo
+
+device: ""                       # "" = cuda if available, else cpu
+half: null                       # null = fp16 on cuda, fp32 on cpu
+
+# --- defaults for the controls -------------------------------------------
+text_prompt: person              # what the text button asks SAM 3 for
+det_threshold: 0.30              # instance score floor for text prompts
+mask_threshold: 0.50             # where a soft mask becomes solid on save
+overlay_alpha: 0.55              # how strongly the mask tints the image
+brush_size: 24                   # px, for by-hand touch-ups
+save_binary: false               # false keeps the soft edges matting needs

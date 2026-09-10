@@ -1,0 +1,63 @@
+# --- model weights -------------------------------------------------------
+# All of these are downloaded by setup.sh, so they never belong in the repo.
+weights/
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.engine
+*.bin
+
+# --- data in and data out ------------------------------------------------
+data/
+frames/
+recordings/
+dataset_out/
+*_out/
+review/
+crops/
+masks/
+masks_fixed/
+final/
+preview/
+
+# media, wherever it lands
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.webp
+*.tif
+*.tiff
+
+# --- pipeline bookkeeping ------------------------------------------------
+crops.csv
+manifest.json
+approved.txt
+
+# --- python --------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.conda/
+.ipynb_checkpoints/
+
+# --- editors and scratch -------------------------------------------------
+*.bak
+*.orig
+*.swp
+.vscode/
+.idea/
+.DS_Store
+
+# --- caches --------------------------------------------------------------
+.cache/
+.huggingface/
+*.log

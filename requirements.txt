@@ -1,0 +1,35 @@
+# --- annotator (bbox_annotator.py) ---------------------------------------
+PySide6>=6.5            # Qt GUI. Enough on its own to annotate + export crops.
+
+# --- running YOLO models (Detect buttons, and the miner) -----------------
+ultralytics>=8.4        # yolo26x.pt needs >=8.4; 8.0 covers v8/v11
+torch>=2.0
+lap>=0.5                # ByteTrack association in ultralytics tracking
+
+# --- miner (mine_person_crops.py) ----------------------------------------
+opencv-python>=4.8      # video decode, seeking, sharpness metric
+numpy>=1.24
+Pillow>=9.0             # only used when CLIP is enabled
+
+# Optional appearance-diversity embedding. Without it the miner falls back to
+# pose + scalar features automatically (prints "[clip] disabled").
+#   pip install git+https://github.com/openai/CLIP.git
+
+# --- mask generator (gen_mask/gen_mask.py) -------------------------------
+transformers>=4.40      # AutoModelForImageSegmentation + trust_remote_code
+timm>=0.9               # Swin backbone inside BiRefNet / RMBG-2.0
+safetensors>=0.4
+einops>=0.7
+kornia>=0.7             # imported by the BiRefNet remote code
+# BiRefNet (ZhengPeng7/BiRefNet) downloads without a login. RMBG-2.0 is gated:
+# accept the licence at https://huggingface.co/briaai/RMBG-2.0 then `hf auth login`.
+
+# --- SAM 3 mask repair UI (mask_fixer.py) --------------------------------
+# SAM 3 ships inside transformers itself - no separate package to build. The
+# facebook/sam3 checkpoint holds both heads the UI uses: the text/box-promptable
+# detector (Sam3Model) and the click-promptable tracker (Sam3TrackerModel).
+transformers>=5.12      # needs Sam3Model / Sam3TrackerModel; 4.40 is too old
+huggingface_hub>=1.5
+PyYAML>=6.0             # mask_fixer.yaml (a .json config needs nothing extra)
+# Weights are gated: accept the licence at https://huggingface.co/facebook/sam3
+# then `hf auth login` and run ./setup_sam3.sh (downloads into weights/sam3).
