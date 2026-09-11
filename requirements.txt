@@ -6,6 +6,9 @@ ultralytics>=8.4        # yolo26x.pt needs >=8.4; 8.0 covers v8/v11
 torch>=2.0
 lap>=0.5                # ByteTrack association in ultralytics tracking
 
+# --- person crops from a video (crop_persons.py) -------------------------
+tqdm>=4.65              # progress bar
+
 # --- miner (mine_person_crops.py) ----------------------------------------
 opencv-python>=4.8      # video decode, seeking, sharpness metric
 numpy>=1.24
